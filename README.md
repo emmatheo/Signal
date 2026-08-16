@@ -100,14 +100,54 @@ http://localhost:3000/app for the dashboard.
 | `ZG_LEDGER_MIN_BALANCE_OG` | No | `0.5` | Auto-top-up threshold. |
 | `ZG_LEDGER_TOPUP_OG` | No | `1` | Amount deposited on each auto-top-up. |
 
+### Verify your 0G configuration
+
+Signal ships a preflight doctor that checks the whole 0G setup and tells you exactly
+what's wrong if something isn't wired up:
+
+```bash
+npm run doctor        # read-only: env, chain RPC, wallet balance,
+                      # storage indexer, compute providers, ledger. Spends nothing.
+
+npm run doctor:full   # additionally runs ONE real inference and ONE real
+                      # storage upload+download round-trip. Spends a small
+                      # amount of testnet 0G.
+```
+
+A passing `doctor:full` is proof the deployment is genuinely talking to 0G Compute and
+0G Storage — it prints the provider address, the model, and a real root hash + tx hash.
+
+Run this first whenever something looks wrong; it isolates the failure (network,
+funding, ledger, provider) far faster than the app's UI errors can.
+
 ### Getting a funded wallet
 
-1. Generate a wallet you're comfortable using for testnet activity (e.g.
-   `node -e "console.log(require('ethers').Wallet.createRandom())"`).
+1. Generate a wallet you're comfortable using for testnet activity:
+   ```bash
+   node -e "const {Wallet}=require('ethers');const w=Wallet.createRandom();console.log(w.address,w.privateKey)"
+   ```
 2. Fund its address with 0G testnet tokens from the 0G faucet (**faucet.0g.ai** — search
    "0G testnet faucet" if that's moved). You need at least ~3.5 0G: 3 is the protocol
    minimum to open a Compute ledger, plus a little for storage-upload gas.
-3. Put the private key in `ZG_PRIVATE_KEY`.
+3. Put the private key in `ZG_PRIVATE_KEY` in `.env.local`.
+4. Run `npm run doctor` to confirm it's funded and reachable, then `npm run doctor:full`
+   to prove the full 0G round-trip works.
+
+### Network access
+
+Signal needs outbound HTTPS to these hosts. In a locked-down environment (corporate
+proxy, CI runner, sandbox with an egress allowlist) they must be permitted, or every
+0G call fails with a proxy `403` before it ever reaches 0G:
+
+```
+evmrpc-testnet.0g.ai                  (0G Chain RPC)
+indexer-storage-testnet-turbo.0g.ai   (0G Storage indexer)
+<provider host>                       (whatever URL the selected compute provider
+                                       advertises on-chain — discovered at runtime)
+faucet.0g.ai                          (only to fund the wallet)
+```
+
+`npm run doctor` reports a blocked host by name, so you don't have to guess.
 
 If the wallet isn't funded, Signal does **not** silently fall back to a demo mode — every
 API route returns a clear, specific error (see [Error handling](#error-handling)).
