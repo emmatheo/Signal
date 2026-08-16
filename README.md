@@ -17,12 +17,27 @@ no mock/simulated path.
 The watchlist and the local list of "which root hashes belong to me" are the only things
 kept in the browser (`localStorage`) — see [Ownership model](#ownership-model) below for why.
 
+## No placeholder data
+
+Nothing in the UI is pre-filled, sampled, or simulated. Every value you see was either
+typed by you or returned by a real 0G Compute call and stored on 0G Storage:
+
+- The watchlist starts empty and only ever contains what you add.
+- The signals rail starts empty and only fills as you generate signals.
+- Research results only appear after a real inference round-trip.
+- History only lists records that actually have a 0G Storage root hash.
+
+Prices, % changes, and sparklines are deliberately **not** shown anywhere: Signal has no
+market-data feed, and price tracking/charting is explicitly out of scope — rendering them
+would mean inventing numbers.
+
 ## Architecture
 
 ```
-Next.js App Router (single page, three tabs: Watchlist / Research / History)
+/          landing page (static, no data)
+/app       dashboard — watchlist rail · research · signals rail, plus History
         │
-        ├── Watchlist: pure client state in localStorage
+        ├── Watchlist: client state in localStorage
         │
         ├── POST /api/summarize ─┐
         ├── POST /api/signal    ─┤─ Node.js route handlers (lib/zg/*)
@@ -69,7 +84,8 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000 for the landing page, or go straight to
+http://localhost:3000/app for the dashboard.
 
 ### Required environment variables
 
@@ -111,16 +127,20 @@ Vercel plan (for a longer function duration) is the fix, not a code change.
 
 ## Verifying it's real (for judges)
 
-1. **Compute**: open the Research tab, submit something. While it runs, the button reads
-   "Running on 0G Compute…". The response includes a `provider` address (0G Compute
-   provider) and `model` — visible in the saved record's `output` and in the API response.
+0. **Start from empty**: open `/app` on a fresh browser profile. Watchlist, signals, and
+   history are all empty — there is no seeded or demo content anywhere to mistake for a
+   working integration.
+1. **Compute**: go to `/app`, type something into the research box and submit. While it
+   runs, the button reads "Running on 0G Compute…". The result footer shows the `model`
+   that served it, and the saved record carries the 0G Compute `provider` address.
 2. **Storage — write**: after summarizing, the app shows a **"Saved to 0G Storage"** badge
    with a **root hash** and **transaction hash**. Neither exists unless the upload actually
    went through.
-3. **Storage — read**: go to History, click an entry. It fetches
+3. **Storage — read**: switch to the History tab and click an entry. It fetches
    `GET /api/records/{rootHash}` fresh from the 0G Storage indexer every time — this is not
    reading from a local cache of the content (only the root-hash *pointer* is local; see
-   [Ownership model](#ownership-model)).
+   [Ownership model](#ownership-model)). Clear `localStorage` and the pointers disappear,
+   but the records still exist on 0G Storage and remain fetchable by root hash.
 4. **Independent verification**: take the root hash shown in the UI and download it
    yourself with the SDK:
    ```js
@@ -158,6 +178,12 @@ points / risks / bottom line), short on-demand signals with one-line reasoning, 
 read from 0G Storage. Deliberately does **not** include trading/execution, charts or
 portfolio tracking, multi-agent orchestration, social/sharing, notifications, or a mobile
 app.
+
+Some elements from the reference design were intentionally left out because implementing
+them would have required inventing data: per-token prices and % changes, sparklines,
+"Data by CoinGecko" attribution, signal impact/category tags (Market / On-Chain /
+Narrative), and nav entries for pages that don't exist (Markets, AI Models, Pricing). The
+layout follows the design; the fabricated content does not.
 
 ## Limitations / setup notes
 

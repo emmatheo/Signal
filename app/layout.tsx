@@ -1,18 +1,21 @@
 import type { Metadata } from 'next'
 import { ZgStatusProvider } from '@/lib/client/status-context'
+import { AppStateProvider } from '@/lib/client/app-state'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Signal — AI research, owned on 0G',
+  title: 'Signal — Clear signal. Less noise.',
   description:
-    'Watchlist, one-click AI research summaries, and short trading signals — with every summary, signal, and history entry stored on 0G Storage and every inference run on 0G Compute.',
+    'AI-powered crypto research: watchlist, one-click summaries, and short signals — with every summary and signal generated on 0G Compute and stored on 0G Storage.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className="min-h-screen font-sans text-base-100 antialiased">
-        <ZgStatusProvider>{children}</ZgStatusProvider>
+      <body className="min-h-screen bg-base-950 font-sans text-base-100 antialiased">
+        <ZgStatusProvider>
+          <AppStateProvider>{children}</AppStateProvider>
+        </ZgStatusProvider>
       </body>
     </html>
   )

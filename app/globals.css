@@ -7,6 +7,25 @@ html {
 }
 
 body {
-  background-color: #08090b;
-  background-image: radial-gradient(circle at 20% -10%, rgba(94, 234, 212, 0.06), transparent 40%);
+  background-color: #0a0b0d;
+}
+
+/* Subtle ambient wash on the landing page only. */
+.landing-bg {
+  background-image: radial-gradient(circle at 15% -5%, rgba(74, 222, 159, 0.07), transparent 45%);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #25282c;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #343840;
 }
