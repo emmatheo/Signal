@@ -192,6 +192,26 @@ if (broker) {
     info('Signal opens one automatically on first use (needs >= 3 0G).')
     info('Run with --full to open it now and verify the whole path.')
   }
+
+  // The provider sub-account is funded separately from the ledger; the SDK
+  // does not do it inside getRequestHeaders. An unfunded sub-account is the
+  // most common reason a correct-looking request is rejected.
+  if (chosenProvider) {
+    try {
+      const account = await broker.inference.getAccount(chosenProvider)
+      const locked = account.balance - account.pendingRefund
+      const required = 2n * 10n ** 18n
+      if (locked >= required) {
+        ok('Provider sub-account funded', `${ethers.formatEther(locked)} 0G locked`)
+      } else {
+        bad(`Provider sub-account underfunded (${ethers.formatEther(locked)} 0G locked).`)
+        info('Signal tops this up automatically; --full will do it now.')
+      }
+    } catch {
+      bad('No provider sub-account yet.')
+      info('Signal creates and funds it on first use; --full will do it now.')
+    }
+  }
 }
 
 // ---------------------------------------------------------------- full
@@ -213,6 +233,27 @@ if (FULL && broker && chosenProvider) {
       await broker.inference.acknowledgeProviderSigner(chosenProvider)
     }
     ok('Provider acknowledged', chosenProvider)
+
+    // Mirrors lib/zg/compute.ts ensureSubAccount(): the sub-account must hold
+    // locked balance before the provider will serve a request.
+    const MIN_LOCKED = 10n ** 18n
+    const required = 2n * MIN_LOCKED
+    let deficit = required
+    try {
+      const account = await broker.inference.getAccount(chosenProvider)
+      const locked = account.balance - account.pendingRefund
+      deficit = locked >= required ? 0n : required - locked
+    } catch {
+      // no sub-account yet — transferFund creates it
+    }
+    if (deficit > 0n) {
+      const amount = deficit < MIN_LOCKED ? MIN_LOCKED : deficit
+      info(`Funding provider sub-account with ${ethers.formatEther(amount)} 0G…`)
+      await broker.ledger.transferFund(chosenProvider, 'inference', amount)
+      ok('Sub-account funded')
+    } else {
+      ok('Sub-account already funded')
+    }
 
     const { endpoint, model } = await broker.inference.getServiceMetadata(
       chosenProvider,

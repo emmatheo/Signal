@@ -16,6 +16,8 @@ interface Result {
   model: string
   queried: string
   createdAt: string
+  sourceFetched: boolean
+  sourceNote?: string
 }
 
 export function ResearchMain() {
@@ -60,6 +62,8 @@ export function ResearchMain() {
         model: record.model,
         queried: raw.trim(),
         createdAt: record.createdAt,
+        sourceFetched: Boolean(data.sourceFetched),
+        sourceNote: data.sourceNote,
       })
       setStage('done')
 
@@ -138,6 +142,12 @@ export function ResearchMain() {
           <p className="mt-1.5 truncate text-[11px] text-base-500">
             Queried: {result.queried} · {new Date(result.createdAt).toLocaleTimeString()}
           </p>
+          {result.sourceFetched && (
+            <p className="mt-1 text-[11px] text-accent">Page content fetched and summarized.</p>
+          )}
+          {result.sourceNote && (
+            <p className="mt-1 text-[11px] text-warn">{result.sourceNote}</p>
+          )}
 
           <div className="mt-5 space-y-3">
             <Section title="Key points" tone="neutral">

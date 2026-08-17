@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { ZgConfigError } from '@/lib/zg/env'
 import { runInference, ZgComputeError } from '@/lib/zg/compute'
 import { uploadJson, ZgStorageError } from '@/lib/zg/storage'
+import { fetchSourceText } from '@/lib/fetch-source'
 import { SUMMARY_SYSTEM_PROMPT, buildSummaryUserPrompt, extractJsonObject } from '@/lib/prompts'
 import type { InputKind, SummaryOutput, SummaryRecord } from '@/lib/types'
 
@@ -42,13 +43,19 @@ export async function POST(req: Request) {
   const raw = body.raw?.trim()
   const owner = body.owner?.trim()
   if (!raw) {
-    return NextResponse.json({ error: 'Nothing to summarize — paste a link, contract address, thread, or text.' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Nothing to summarize — paste a link, contract address, thread, or text.' },
+      { status: 400 }
+    )
   }
   if (!owner) {
     return NextResponse.json({ error: 'Missing owner identity.' }, { status: 400 })
   }
   if (raw.length > 20000) {
-    return NextResponse.json({ error: 'Input is too long (max 20,000 characters).' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Input is too long (max 20,000 characters).' },
+      { status: 400 }
+    )
   }
 
   const kind: InputKind =
@@ -57,14 +64,25 @@ export async function POST(req: Request) {
       : detectKind(raw)
 
   try {
-    const inference = await runInference(SUMMARY_SYSTEM_PROMPT, buildSummaryUserPrompt(kind, raw))
+    // For links, retrieve the page so the model summarizes real content
+    // rather than guessing from the URL string. Never fatal: on failure this
+    // falls back to the raw input and reports why.
+    const source = await fetchSourceText(raw)
+
+    const inference = await runInference(
+      SUMMARY_SYSTEM_PROMPT,
+      buildSummaryUserPrompt(kind, source.text)
+    )
 
     let parsed: unknown
     try {
       parsed = extractJsonObject(inference.content)
     } catch {
       return NextResponse.json(
-        { error: '0G Compute returned a response that could not be parsed as a structured summary. Try again.' },
+        {
+          error:
+            '0G Compute returned a response that could not be parsed as a structured summary. Try again.',
+        },
         { status: 502 }
       )
     }
@@ -88,7 +106,13 @@ export async function POST(req: Request) {
 
     const { rootHash, txHash } = await uploadJson(record)
 
-    return NextResponse.json({ record, rootHash, txHash })
+    return NextResponse.json({
+      record,
+      rootHash,
+      txHash,
+      sourceFetched: source.fetched,
+      sourceNote: source.note,
+    })
   } catch (err) {
     if (err instanceof ZgConfigError) {
       return NextResponse.json({ error: err.message, code: 'not_configured' }, { status: 503 })

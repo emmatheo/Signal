@@ -31,6 +31,18 @@ Prices, % changes, and sparklines are deliberately **not** shown anywhere: Signa
 market-data feed, and price tracking/charting is explicitly out of scope — rendering them
 would mean inventing numbers.
 
+## URL fetching
+
+When you paste an `http(s)` link, Signal fetches the page server-side and feeds the
+extracted text to the model, so summaries reflect real page content instead of guesses
+from the URL string.
+
+It is deliberately conservative: 10s timeout, 512KB download cap, 8,000 characters passed
+to the model, HTML/text content types only, at most 3 redirects (each re-validated), and
+SSRF guards that refuse loopback, private, link-local, and carrier-NAT addresses. If a
+fetch fails for any reason the summary still runs from the raw input, and the UI says so
+explicitly rather than implying it read the page.
+
 ## Architecture
 
 ```
@@ -230,9 +242,14 @@ layout follows the design; the fabricated content does not.
 - **No wallet-connect UI** — see [Ownership model](#ownership-model). This was a deliberate
   reading of a spec that never mentions connecting a user wallet; flagging it explicitly
   rather than quietly picking a design.
-- **Single shared inference provider per deployment.** `getServiceMetadata` picks the first
-  acknowledged provider on first use if `ZG_COMPUTE_PROVIDER_ADDRESS` isn't set. If that
-  provider is unhealthy, pin a known-good one via the env var.
+- **Provider selection is automatic with failover.** If `ZG_COMPUTE_PROVIDER_ADDRESS` isn't
+  set, Signal reuses the last known-good provider and, on failure, re-selects and retries
+  against up to 3 providers before giving up. Pin one via the env var for a predictable demo.
+- **Provider sub-accounts are funded automatically.** The 0G Compute ledger and the
+  per-provider sub-account are separate: the SDK does *not* fund the sub-account inside
+  `getRequestHeaders`. Signal tops it up to 2 0G locked before requesting inference
+  (`ensureSubAccount` in `lib/zg/compute.ts`) — without this, correctly-formed requests are
+  rejected for insufficient balance.
 - **This build could not be exercised against live 0G endpoints from the environment it was
   developed in** — outbound access to `0g.ai` hosts was blocked by that sandbox's network
   policy. Every API call, contract address, and response shape here was verified against
