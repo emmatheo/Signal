@@ -45,12 +45,30 @@ export function saveWatchlist(list: WatchlistItem[]) {
 }
 
 /**
- * Actual summary/signal content lives only on 0G Storage — this is a local
- * index of pointers so the UI knows what to fetch. Opening an item always
- * re-reads its content from 0G Storage; nothing here substitutes for that.
+ * Local index of where this browser's records live on 0G Storage.
+ *
+ * Content is never stored here. Values are sanitized on read so that a
+ * pointer written by an older build (which did cache preview text) cannot
+ * be rendered as if it had come back from 0G Storage.
  */
 export function getHistoryPointers(): HistoryPointer[] {
-  return read<HistoryPointer[]>(HISTORY_KEY, [])
+  const raw = read<unknown[]>(HISTORY_KEY, [])
+  if (!Array.isArray(raw)) return []
+
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const e = entry as Record<string, unknown>
+    if (typeof e.rootHash !== 'string' || typeof e.txHash !== 'string') return []
+    if (e.type !== 'summary' && e.type !== 'signal') return []
+    return [
+      {
+        rootHash: e.rootHash,
+        txHash: e.txHash,
+        type: e.type,
+        createdAt: typeof e.createdAt === 'string' ? e.createdAt : new Date(0).toISOString(),
+      },
+    ]
+  })
 }
 
 export function saveHistoryPointers(pointers: HistoryPointer[]) {

@@ -36,14 +36,11 @@ export function WatchlistRail() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Signal generation failed.')
 
+      // Pointer only — the signal text itself is read back from 0G Storage.
       const pointer: HistoryPointer = {
         rootHash: data.rootHash,
         txHash: data.txHash,
         type: 'signal',
-        owner: ownerId,
-        title: item.label,
-        preview: data.record.output.signal,
-        detail: data.record.output.reason,
         createdAt: data.record.createdAt,
       }
       addPointer(pointer)

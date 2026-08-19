@@ -27,6 +27,29 @@ typed by you or returned by a real 0G Compute call and stored on 0G Storage:
 - Research results only appear after a real inference round-trip.
 - History only lists records that actually have a 0G Storage root hash.
 
+## 0G is the engine, not an integration
+
+Signal cannot produce or display research without 0G. This is enforced structurally,
+not by convention:
+
+- **Inference has exactly one path — 0G Compute.** There is no OpenAI/Anthropic client in
+  the dependency tree and no fallback branch. If Compute is unreachable, no summary or
+  signal is produced at all.
+- **The browser stores pointers, never content.** `localStorage` holds only
+  `{rootHash, txHash, type, createdAt}` — where a record lives, not what it says. Every
+  word of every summary and signal shown in the UI is fetched from 0G Storage on page
+  load via `POST /api/records`.
+- **So history is only viewable while 0G Storage is reachable.** Reload the page with
+  Storage down and you get an explicit "could not be read from 0G Storage" error with the
+  underlying reason and a retry — never stale text that looks like working history.
+- **Pointers are written only after a successful upload.** A "Saved to 0G Storage" badge
+  cannot appear unless a real root hash and tx hash came back.
+- Pointers from older builds that did cache preview text are **sanitized on read**, so
+  that content can never be rendered as if it came from 0G.
+
+The practical consequence: wipe `localStorage` and your records still exist on 0G Storage,
+retrievable by root hash. Break 0G Storage and the app shows errors, not a local copy.
+
 Prices, % changes, and sparklines are deliberately **not** shown anywhere: Signal has no
 market-data feed, and price tracking/charting is explicitly out of scope — rendering them
 would mean inventing numbers.
@@ -50,10 +73,12 @@ explicitly rather than implying it read the page.
 /app       dashboard — watchlist rail · research · signals rail, plus History
         │
         ├── Watchlist: client state in localStorage
+        ├── History index: root-hash pointers only, no content
         │
         ├── POST /api/summarize ─┐
-        ├── POST /api/signal    ─┤─ Node.js route handlers (lib/zg/*)
-        └── GET  /api/records/:rootHash
+        ├── POST /api/signal     │─ Node.js route handlers (lib/zg/*)
+        ├── POST /api/records    │  (batch read — every rendered word
+        └── GET  /api/records/:rootHash   comes back through these)
                                   │
                     ┌─────────────┴─────────────┐
                     │                            │
@@ -188,12 +213,15 @@ Vercel plan (for a longer function duration) is the fix, not a code change.
 2. **Storage — write**: after summarizing, the app shows a **"Saved to 0G Storage"** badge
    with a **root hash** and **transaction hash**. Neither exists unless the upload actually
    went through.
-3. **Storage — read**: switch to the History tab and click an entry. It fetches
-   `GET /api/records/{rootHash}` fresh from the 0G Storage indexer every time — this is not
-   reading from a local cache of the content (only the root-hash *pointer* is local; see
-   [Ownership model](#ownership-model)). Clear `localStorage` and the pointers disappear,
-   but the records still exist on 0G Storage and remain fetchable by root hash.
-4. **Independent verification**: take the root hash shown in the UI and download it
+3. **Storage — read**: reload the page. Every summary and signal you see is re-fetched from
+   the 0G Storage indexer at that moment (`POST /api/records`); none of it is cached in the
+   browser. Clear `localStorage` and the pointers disappear, but the records still exist on
+   0G Storage and remain fetchable by root hash.
+4. **Prove Storage is load-bearing**: break it deliberately — set `ZG_INDEXER_RPC` to an
+   unreachable host and reload. History and the signals rail report
+   "could not be read from 0G Storage" with the underlying error instead of showing
+   content. If a local cache were backing the UI, the old text would still appear.
+5. **Independent verification**: take the root hash shown in the UI and download it
    yourself with the SDK:
    ```js
    import { Indexer } from '@0gfoundation/0g-storage-ts-sdk'
@@ -202,7 +230,7 @@ Vercel plan (for a longer function duration) is the fix, not a code change.
    console.log(await blob.text())
    ```
    Or check the transaction hash on a 0G Chain testnet block explorer.
-5. **No-fallback check**: unset `ZG_PRIVATE_KEY` (or point it at an unfunded wallet) and
+6. **No-fallback check**: unset `ZG_PRIVATE_KEY` (or point it at an unfunded wallet) and
    confirm the app shows a clear error banner instead of producing fake results — this is
    the "no silent demo mode" requirement from the spec.
 

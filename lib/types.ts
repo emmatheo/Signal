@@ -41,21 +41,18 @@ export interface SignalRecord {
 export type ZgRecord = SummaryRecord | SignalRecord
 
 /**
- * Local index of records that live on 0G Storage. Holds only enough to
- * render a list row; opening any entry always re-reads the full record
- * from 0G Storage by root hash.
+ * Pointer to a record on 0G Storage. Deliberately carries NO content —
+ * only where the record lives and enough metadata to route it to the right
+ * list. Every piece of text the UI displays is fetched from 0G Storage by
+ * `rootHash`, so if 0G is unreachable there is nothing to render.
+ *
+ * Do not add content fields here. Caching summary or signal text locally
+ * would let Signal display history that 0G Storage never returned.
  */
 export interface HistoryPointer {
   rootHash: string
   txHash: string
   type: 'summary' | 'signal'
-  owner: string
-  /** Watchlist item for signals; short source label for summaries. */
-  title: string
-  /** Signal text for signals; bottom line for summaries. */
-  preview: string
-  /** One-line reason, signals only. */
-  detail?: string
   createdAt: string
 }
 

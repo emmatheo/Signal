@@ -67,13 +67,11 @@ export function ResearchMain() {
       })
       setStage('done')
 
+      // Pointer only — the summary itself is read back from 0G Storage.
       const pointer: HistoryPointer = {
         rootHash: data.rootHash,
         txHash: data.txHash,
         type: 'summary',
-        owner: ownerId,
-        title: raw.trim().slice(0, 80),
-        preview: record.output.bottomLine,
         createdAt: record.createdAt,
       }
       addPointer(pointer)
