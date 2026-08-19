@@ -23,8 +23,20 @@ export function Spinner({ className }: { className?: string }) {
   )
 }
 
-export function Mono({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cx('font-mono text-xs tracking-tight', className)}>{children}</span>
+export function Mono({
+  children,
+  className,
+  title,
+}: {
+  children: ReactNode
+  className?: string
+  title?: string
+}) {
+  return (
+    <span className={cx('font-mono text-xs tracking-tight', className)} title={title}>
+      {children}
+    </span>
+  )
 }
 
 export function truncateHash(hash: string, size = 6): string {

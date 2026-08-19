@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useAppState } from '@/lib/client/app-state'
 import type { HistoryPointer, ZgRecord } from '@/lib/types'
-import { Mono, Spinner, truncateHash } from '@/components/ui'
+import { Spinner } from '@/components/ui'
+import { ProofRefs, RecordBody } from './RecordView'
 
 export function HistoryView() {
   const { pointers, records, recordErrors, recordsStatus, recordsError, reloadRecords } =
@@ -148,66 +149,14 @@ function HistoryRow({
       {open && record && (
         <div className="mt-4 border-t border-base-800 pt-4">
           <RecordBody record={record} />
-          <div className="mt-4 flex flex-col gap-1 text-[11px] text-base-600">
-            <span className="break-all">
-              Root hash <Mono className="text-base-400">{pointer.rootHash}</Mono>
-            </span>
-            <span>
-              Tx <Mono className="text-base-400">{truncateHash(pointer.txHash, 8)}</Mono>
-            </span>
-            <span>
-              Model <Mono className="text-base-400">{record.model}</Mono>
-            </span>
-          </div>
+          <ProofRefs
+            rootHash={pointer.rootHash}
+            txHash={pointer.txHash}
+            model={record.model}
+            provider={record.provider}
+          />
         </div>
       )}
     </li>
-  )
-}
-
-function RecordBody({ record }: { record: ZgRecord }) {
-  if (record.type === 'summary') {
-    return (
-      <div className="flex flex-col gap-3 text-sm">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-base-500">Source</p>
-          <p className="mt-1 break-words text-base-300">
-            <span className="text-base-600">[{record.source.kind}]</span> {record.source.raw}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-base-500">Key points</p>
-          <ul className="mt-1 list-disc space-y-1 pl-4 text-base-200">
-            {record.output.keyPoints.map((p, i) => (
-              <li key={i}>{p}</li>
-            ))}
-          </ul>
-        </div>
-        {record.output.risks.length > 0 && (
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-base-500">Risks</p>
-            <ul className="mt-1 list-disc space-y-1 pl-4 text-base-200">
-              {record.output.risks.map((r, i) => (
-                <li key={i}>{r}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-base-500">Bottom line</p>
-          <p className="mt-1 text-base-100">{record.output.bottomLine}</p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-2 text-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-base-500">
-        {record.watchlistItem}
-      </p>
-      <p className="text-base-100">{record.output.signal}</p>
-      <p className="text-base-400">{record.output.reason}</p>
-    </div>
   )
 }

@@ -3,19 +3,17 @@
 import { useState } from 'react'
 import { useAppState } from '@/lib/client/app-state'
 import { useZgStatus } from '@/lib/client/status-context'
-import type { HistoryPointer, SummaryOutput } from '@/lib/types'
-import { Mono, Spinner, truncateHash } from '@/components/ui'
+import type { HistoryPointer, SummaryRecord } from '@/lib/types'
+import { Spinner } from '@/components/ui'
+import { ProofRefs, RecordBody } from './RecordView'
 
 type Stage = 'idle' | 'inference' | 'saving' | 'done' | 'error'
 
 interface Result {
-  output: SummaryOutput
+  record: SummaryRecord
   rootHash: string
   txHash: string
-  provider: string
-  model: string
   queried: string
-  createdAt: string
   sourceFetched: boolean
   sourceNote?: string
 }
@@ -53,15 +51,12 @@ export function ResearchMain() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Summarize failed.')
 
-      const record = data.record
+      const record = data.record as SummaryRecord
       setResult({
-        output: record.output,
+        record,
         rootHash: data.rootHash,
         txHash: data.txHash,
-        provider: record.provider,
-        model: record.model,
         queried: raw.trim(),
-        createdAt: record.createdAt,
         sourceFetched: Boolean(data.sourceFetched),
         sourceNote: data.sourceNote,
       })
@@ -138,7 +133,7 @@ export function ResearchMain() {
             </span>
           </header>
           <p className="mt-1.5 truncate text-[11px] text-base-500">
-            Queried: {result.queried} · {new Date(result.createdAt).toLocaleTimeString()}
+            Queried: {result.queried} · {new Date(result.record.createdAt).toLocaleTimeString()}
           </p>
           {result.sourceFetched && (
             <p className="mt-1 text-[11px] text-accent">Page content fetched and summarized.</p>
@@ -147,77 +142,22 @@ export function ResearchMain() {
             <p className="mt-1 text-[11px] text-warn">{result.sourceNote}</p>
           )}
 
-          <div className="mt-5 space-y-3">
-            <Section title="Key points" tone="neutral">
-              <ul className="space-y-1.5">
-                {result.output.keyPoints.map((p, i) => (
-                  <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-base-200">
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </Section>
-
-            <Section title="Risks" tone="warn">
-              {result.output.risks.length > 0 ? (
-                <ul className="space-y-1.5">
-                  {result.output.risks.map((r, i) => (
-                    <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-base-200">
-                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warn" />
-                      {r}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-base-500">None flagged.</p>
-              )}
-            </Section>
-
-            <Section title="Bottom line" tone="accent">
-              <p className="text-sm leading-relaxed text-base-100">{result.output.bottomLine}</p>
-            </Section>
+          <div className="mt-5 rounded-xl border border-base-700 bg-base-900 p-4">
+            <RecordBody record={result.record} />
           </div>
 
-          <footer className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-base-800 pt-3 text-[11px] text-base-600">
-            <span>
-              Root hash <Mono className="text-base-400">{truncateHash(result.rootHash, 8)}</Mono>
-            </span>
-            <span>
-              Tx <Mono className="text-base-400">{truncateHash(result.txHash, 8)}</Mono>
-            </span>
-            <span>
-              Model <Mono className="text-base-400">{result.model}</Mono>
-            </span>
-          </footer>
+          <ProofRefs
+            rootHash={result.rootHash}
+            txHash={result.txHash}
+            model={result.record.model}
+            provider={result.record.provider}
+          />
+
           <p className="mt-3 text-[11px] text-base-600">
             AI-generated summary may contain errors. Always do your own research.
           </p>
         </article>
       )}
     </div>
-  )
-}
-
-function Section({
-  title,
-  tone,
-  children,
-}: {
-  title: string
-  tone: 'neutral' | 'warn' | 'accent'
-  children: React.ReactNode
-}) {
-  const ring = {
-    neutral: 'border-base-700',
-    warn: 'border-warn/25',
-    accent: 'border-accent/25',
-  }[tone]
-
-  return (
-    <section className={`rounded-xl border ${ring} bg-base-900 p-4`}>
-      <h3 className="text-xs font-medium uppercase tracking-wide text-base-500">{title}</h3>
-      <div className="mt-2.5">{children}</div>
-    </section>
   )
 }

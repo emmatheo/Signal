@@ -310,6 +310,34 @@ if (FULL && broker && chosenProvider) {
     }
     if (recovered?.probe === 'signal-doctor') {
       ok('Download verified — round-trip works')
+
+      // Prove recover-by-tx: derive the storage root from the tx receipt
+      // alone, mirroring what /api/recover does (lib/zg/resolve.ts is
+      // TypeScript, so the derivation is repeated here rather than imported).
+      try {
+        const { FixedPriceFlow__factory } = await import('@0gfoundation/0g-storage-ts-sdk')
+        const iface = new ethers.Interface(FixedPriceFlow__factory.abi)
+        const receipt = await provider.getTransactionReceipt(txHash)
+        let derived = null
+        for (const log of receipt?.logs ?? []) {
+          try {
+            const parsed = iface.parseLog({ topics: [...log.topics], data: log.data })
+            if (parsed?.name === 'Submit') {
+              const nodes = parsed.args?.submission?.nodes
+              if (nodes?.length === 1) derived = nodes[0].root
+            }
+          } catch {}
+        }
+        if (derived && derived.toLowerCase() === rootHash.toLowerCase()) {
+          ok('Recover-by-tx verified', `tx -> ${derived.slice(0, 14)}…`)
+        } else if (derived) {
+          bad(`Recover-by-tx derived a different root (${derived.slice(0, 14)}…).`)
+        } else {
+          bad('Recover-by-tx could not derive a root from the tx receipt.')
+        }
+      } catch (err) {
+        bad('Recover-by-tx check failed.', reason(err))
+      }
     } else {
       fail('Uploaded, but could not read the record back yet.')
       info('Storage propagation can lag; retry the doctor in a minute.')

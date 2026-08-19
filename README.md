@@ -66,6 +66,14 @@ SSRF guards that refuse loopback, private, link-local, and carrier-NAT addresses
 fetch fails for any reason the summary still runs from the raw input, and the UI says so
 explicitly rather than implying it read the page.
 
+## Cost model
+
+- **New research or a new signal** runs 0G Compute and writes to 0G Storage. That consumes
+  real 0G from the ledger and its provider sub-account.
+- **Recovering by hash** performs a 0G Storage read only. `/api/recover` contains no
+  inference call, so re-opening past research never pays to regenerate it. The UI badges
+  recovered records **"no Compute charged"** so the distinction is visible, not implied.
+
 ## Architecture
 
 ```
@@ -78,7 +86,9 @@ explicitly rather than implying it read the page.
         ├── POST /api/summarize ─┐
         ├── POST /api/signal     │─ Node.js route handlers (lib/zg/*)
         ├── POST /api/records    │  (batch read — every rendered word
-        └── GET  /api/records/:rootHash   comes back through these)
+        ├── GET  /api/records/:rootHash   comes back through these)
+        └── POST /api/recover    │  (root hash OR tx hash -> stored record,
+                                  │   storage read only, no inference)
                                   │
                     ┌─────────────┴─────────────┐
                     │                            │
@@ -108,6 +118,10 @@ here's precisely what "owned by the user" means in this build:
   wallet-connect flow, and one wasn't built. Each record is tagged with an `owner` id — a
   random id generated once per browser and kept in `localStorage` — so "my history" means
   "records tagged with my browser's id," not "records signed by my private key."
+- **Recovery does not depend on this app.** Every result carries a storage root and a tx
+  hash. Paste either into the Recover tab from any browser — or fetch the root directly
+  with the 0G SDK — and the record comes back. That is what makes the history portable
+  rather than account-bound.
 - If you want stricter, wallet-signed non-custodial ownership (each user's own browser
   wallet signs their own uploads), that's a natural next step but was out of scope for this
   spec — flagged here rather than silently assumed.
@@ -204,35 +218,70 @@ Vercel plan (for a longer function duration) is the fix, not a code change.
 
 ## Verifying it's real (for judges)
 
-0. **Start from empty**: open `/app` on a fresh browser profile. Watchlist, signals, and
-   history are all empty — there is no seeded or demo content anywhere to mistake for a
-   working integration.
-1. **Compute**: go to `/app`, type something into the research box and submit. While it
-   runs, the button reads "Running on 0G Compute…". The result footer shows the `model`
-   that served it, and the saved record carries the 0G Compute `provider` address.
-2. **Storage — write**: after summarizing, the app shows a **"Saved to 0G Storage"** badge
-   with a **root hash** and **transaction hash**. Neither exists unless the upload actually
-   went through.
-3. **Storage — read**: reload the page. Every summary and signal you see is re-fetched from
-   the 0G Storage indexer at that moment (`POST /api/records`); none of it is cached in the
-   browser. Clear `localStorage` and the pointers disappear, but the records still exist on
-   0G Storage and remain fetchable by root hash.
-4. **Prove Storage is load-bearing**: break it deliberately — set `ZG_INDEXER_RPC` to an
-   unreachable host and reload. History and the signals rail report
-   "could not be read from 0G Storage" with the underlying error instead of showing
-   content. If a local cache were backing the UI, the old text would still appear.
-5. **Independent verification**: take the root hash shown in the UI and download it
-   yourself with the SDK:
-   ```js
-   import { Indexer } from '@0gfoundation/0g-storage-ts-sdk'
-   const indexer = new Indexer('https://indexer-storage-testnet-turbo.0g.ai')
-   const [blob, err] = await indexer.downloadToBlob('<rootHash>')
-   console.log(await blob.text())
-   ```
-   Or check the transaction hash on a 0G Chain testnet block explorer.
-6. **No-fallback check**: unset `ZG_PRIVATE_KEY` (or point it at an unfunded wallet) and
-   confirm the app shows a clear error banner instead of producing fake results — this is
-   the "no silent demo mode" requirement from the spec.
+Run these in order. Each step produces evidence that cannot exist without real 0G calls.
+
+### 1. Prove the environment is live
+
+```bash
+npm run doctor        # read-only checks, spends nothing
+npm run doctor:full   # real inference + real storage round-trip
+```
+
+`doctor:full` must print, in order:
+
+```
+✓ Provider acknowledged   0x…          <- a real 0G Compute provider
+✓ Sub-account funded
+✓ Service metadata        <model> @ …  <- the model that will serve you
+✓ Inference succeeded     "ok"         <- 0G Compute produced this
+✓ Upload succeeded
+  root hash 0x…                        <- content address on 0G Storage
+  tx        0x…                        <- 0G Chain settlement reference
+✓ Download verified — round-trip works <- read back from the network
+✓ Recover-by-tx verified  tx -> 0x…    <- root derived from the tx receipt alone
+```
+
+The last line is the important one: the storage root is recovered from the **transaction
+receipt**, by decoding the Flow contract's `Submit` event — not from any local record.
+
+### 2. Prove a research request uses 0G
+
+Open `/app`, paste a link or some text, press **Research**. The button reports
+`Running on 0G Compute…` then `Saving to 0G Storage…`, and the result footer shows a
+**storage root**, a **tx hash**, the **model**, and the **provider address**. Copy the
+storage root.
+
+### 3. Prove recovery reads storage instead of regenerating
+
+Open the **Recover** tab (or `/app?view=recover`) and paste that storage root — or the tx
+hash. The same research comes back, badged **"no Compute charged"**. Recovery performs a
+0G Storage read only; `/api/recover` never calls inference. Paste it in a different
+browser profile to confirm it does not depend on your local state.
+
+### 4. Prove storage is load-bearing, not a cache
+
+Reload `/app`. Every summary and signal is re-fetched from 0G Storage at that moment; the
+browser stores only `{rootHash, txHash, type, createdAt}`. To confirm, set `ZG_INDEXER_RPC`
+to an unreachable host and reload: History and the signals rail report
+"could not be read from 0G Storage" with the underlying error instead of showing content.
+A local cache would still display the old text.
+
+### 5. Prove there is no demo mode
+
+Unset `ZG_PRIVATE_KEY` and reload `/app`. A blocking banner states that Signal cannot
+generate or read anything, every action is disabled, and the API returns `503`. No sample
+research appears at any point.
+
+### 6. Verify independently of this app
+
+```js
+import { Indexer } from '@0gfoundation/0g-storage-ts-sdk'
+const indexer = new Indexer('https://indexer-storage-testnet-turbo.0g.ai')
+const [blob] = await indexer.downloadToBlob('<rootHash>')
+console.log(await blob.text())   // the exact record Signal stored
+```
+
+Or look up the tx hash on a 0G Chain testnet explorer.
 
 ## Error handling
 
@@ -278,12 +327,19 @@ layout follows the design; the fabricated content does not.
   `getRequestHeaders`. Signal tops it up to 2 0G locked before requesting inference
   (`ensureSubAccount` in `lib/zg/compute.ts`) — without this, correctly-formed requests are
   rejected for insufficient balance.
-- **This build could not be exercised against live 0G endpoints from the environment it was
-  developed in** — outbound access to `0g.ai` hosts was blocked by that sandbox's network
-  policy. Every API call, contract address, and response shape here was verified against
-  the actual published SDK type declarations, the SDKs' own bundled READMEs, and their
-  compiled output (not guessed or invented) — but a first real run against the testnet,
-  with a funded wallet, should be your first step before demoing.
+- **This build was developed in an environment with no network access to `0g.ai`** (egress
+  policy blocked every 0G host), so the live network calls have not been executed. Every
+  API call, contract address, and response shape was verified against the published SDK's
+  type declarations, bundled README, and compiled output — and behaviours that could be
+  checked offline were checked (JSON parsing, SSRF guards, URL fetching, storage-root
+  derivation from a submission, all UI states, every API error path). Run
+  `npm run doctor:full` with a funded wallet as the first step before demoing; it is
+  designed to surface anything that only a live run can.
+- **Recover-by-tx handles single-node submissions.** A storage root equals
+  `submission.nodes[0].root` only when the submission has one node — verified empirically
+  across payload sizes. Signal's records are small JSON and always land in that case; for a
+  hypothetical multi-part upload the API says so explicitly and asks for the storage root
+  instead of returning a wrong hash.
 - Uploads use `finalityRequired: false` for responsiveness inside a serverless function's
   time budget (see `lib/zg/storage.ts`); the write itself is still a real on-chain
   submission with a real root hash, it just doesn't block on full cross-node replication.

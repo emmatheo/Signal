@@ -9,13 +9,17 @@ import { WatchlistRail } from './WatchlistRail'
 import { ResearchMain } from './ResearchMain'
 import { SignalsRail } from './SignalsRail'
 import { HistoryView } from './HistoryView'
+import { RecoverPanel } from './RecoverPanel'
+import { ConfigGate } from './ConfigGate'
 import { cx } from '@/components/ui'
 
-type View = 'research' | 'history'
+type View = 'research' | 'history' | 'recover'
 
 export function Dashboard() {
   const params = useSearchParams()
-  const initial: View = params.get('view') === 'history' ? 'history' : 'research'
+  const requested = params.get('view')
+  const initial: View =
+    requested === 'history' ? 'history' : requested === 'recover' ? 'recover' : 'research'
   const [view, setView] = useState<View>(initial)
 
   return (
@@ -26,7 +30,7 @@ export function Dashboard() {
         </Link>
 
         <nav className="flex items-center gap-1">
-          {(['research', 'history'] as const).map((v) => (
+          {(['research', 'history', 'recover'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -48,6 +52,8 @@ export function Dashboard() {
         </div>
       </header>
 
+      <ConfigGate />
+
       {/*
         One grid, each rail mounted exactly once. On large screens it's three
         columns that scroll independently; below that it reflows to a single
@@ -59,7 +65,9 @@ export function Dashboard() {
         </div>
 
         <main className="order-1 min-h-0 lg:order-2 lg:overflow-y-auto">
-          {view === 'research' ? <ResearchMain /> : <HistoryView />}
+          {view === 'research' && <ResearchMain />}
+          {view === 'history' && <HistoryView />}
+          {view === 'recover' && <RecoverPanel />}
         </main>
 
         <div className="order-3 min-h-0 lg:overflow-y-auto">
